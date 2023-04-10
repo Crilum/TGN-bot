@@ -38,6 +38,10 @@ const commands = [
             "type": 3,
             "required": "false",
         }]
+    },
+    {
+        name: "bubble-wrap",
+        description: "Because why not"
     }
 ];
 
@@ -318,6 +322,14 @@ We can't wait to see what games you find!!`)
         mClient.close();
     }
 
+    if (interaction.commandName == "bubble-wrap") {
+        interaction.reply(`||pop||||pop||||pop||||pop||
+||pop||||pop||||pop||||pop||
+||pop||||pop||||pop||||pop||
+||pop||||pop||||pop||||pop||
+||pop||||pop||||pop||||pop||
+||pop||||pop||||pop||||pop||`)
+    }
 });
 
 client.login(token);
