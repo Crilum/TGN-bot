@@ -321,3 +321,5 @@ We can't wait to see what games you find!!`)
 });
 
 client.login(token);
+
+module.exports = "./index.js";
