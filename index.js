@@ -42,6 +42,16 @@ const commands = [
     {
         name: "bubble-wrap",
         description: "Because why not"
+    },
+    {
+        name: "find-the-octopus",
+        description: "Find the octopus in a sea of fish!",
+        options: [{
+            "name": "private",
+            "description": "Should this puzzle be sent to the whole server (false), or just you (true)?",
+            "type": 5,
+            "required": "false",
+        }],
     }
 ];
 
@@ -169,10 +179,12 @@ client.on('interactionCreate', async interaction => {
             .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
 
         const message = await interaction.reply({ embeds: [embed], fetchReply: true });
+        log("Poll sent. Now adding reactions...")
         for (let i = 0; i < (gameList.split(/\r\n|\r|\n/).length - 3); i++) {
             log("Reacted with: " + letterEmojis[i])
             await message.react(letterEmojis[i])
         }
+        log("Sucessfully reacted with " + (gameList.split(/\r\n|\r|\n/).length - 3) + " reactions.")
     }
 
     if (interaction.commandName == "add-poll-item") {
@@ -185,6 +197,7 @@ We can't wait to see what games you find!!`)
                 .setTimestamp()
                 .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
             await interaction.reply({ embeds: [embed], fetchReply: true })
+            log("Error: Someone tried to add a game without permissions.")
             return
         };
         let new_title = interaction.options.getString('game-title');
@@ -224,6 +237,7 @@ We can't wait to see what games you find!!`)
                 .setTimestamp()
                 .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
             await interaction.reply({ embeds: [embed], fetchReply: true })
+            log("Somebody tried to remove a poll item without permissions.")
             return
         };
         let game_title = interaction.options.getString('game-title');
@@ -244,6 +258,7 @@ We can't wait to see what games you find!!`)
                     .setTimestamp()
                     .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
                 await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true })
+                log("Error: No game with that Document ID.")
                 return
             }
             const doc_to_remove = findResult._id
@@ -269,6 +284,7 @@ We can't wait to see what games you find!!`)
                     .setTimestamp()
                     .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
                 await interaction.reply({ embeds: [embed], fetchReply: true })
+                log("Error: No game with that Document ID.\n\nThis is a Level 2 error.. Weird..")
             }
 
         } else if (game_title != null) {
@@ -282,6 +298,7 @@ We can't wait to see what games you find!!`)
                     .setTimestamp()
                     .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
                 await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true })
+                log("Error: No game with that title.")
                 return
             }
             const doc_to_remove = findResult._id
@@ -298,6 +315,7 @@ We can't wait to see what games you find!!`)
                     .setTimestamp()
                     .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
                 await interaction.reply({ embeds: [embed], fetchReply: true })
+                log(`Deleted game \`${removed_name}\`, with document ID \`${doc_to_remove}\`.`)
             } else {
                 const embed = new EmbedBuilder()
                     .setColor(13801196)
@@ -307,6 +325,7 @@ We can't wait to see what games you find!!`)
                     .setTimestamp()
                     .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
                 await interaction.reply({ embeds: [embed], fetchReply: true })
+                log("Error: No game with that Document ID.\n\nThis is a Level 2 error.. Weird..")
             }
 
         } else {
@@ -317,18 +336,87 @@ We can't wait to see what games you find!!`)
                 .setTimestamp()
                 .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
             await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true })
+            log("Error: No name or ID specified.")
             return
         }
         mClient.close();
     }
 
     if (interaction.commandName == "bubble-wrap") {
-        interaction.reply(`||pop||||pop||||pop||||pop||
-||pop||||pop||||pop||||pop||
-||pop||||pop||||pop||||pop||
-||pop||||pop||||pop||||pop||
-||pop||||pop||||pop||||pop||
-||pop||||pop||||pop||||pop||`)
+        interaction.reply(`||pop||||pop||||pop||||pop||||pop||
+||pop||||pop||||pop||||pop||||pop||
+||pop||||pop||||pop||||pop||||pop||
+||pop||||pop||||pop||||pop||||pop||
+||pop||||pop||||pop||||pop||||pop||
+||pop||||pop||||pop||||pop||||pop||`)
+        log("Sent bubble-wrap.")
+    }
+
+    if (interaction.commandName == "find-the-octopus") {
+        const privateOpt = interaction.options.getBoolean('private');
+
+        let values = [
+            "", "", "", "", "", "", "", "",
+            "", "", "", "", "", "", "", "",
+            "", "", "", "", "", "", "", "",
+            "", "", "", "", "", "", "", "",
+            "", "", "", "", "", "", "", "",
+            "", "", "", "", "", "", "", "",
+            "", "", "", "", "", "", "", "",
+            "", "", "", "", "", "", "", "",
+        ]
+
+        for (let i = 0; i < 8; i++) {
+            values[i] = ":ocean:"
+        }
+
+        for (let i = 8; i < 64; i++) {
+            values[i] = "<:wtr:1095807899479048336>"//<:water:1095804110151880745>"
+        }
+        for (let i = 8; i < 64; i++) {
+            if (Math.ceil(Math.random() * 3) == 2) {
+                let fish_num = `${Math.ceil(Math.random() * 7)}`
+                switch (fish_num) {
+                    case "1":
+                        values[i] = "<:a:1095810182879129681>";
+                        break;
+                    case "2":
+                        values[i] = "<:a:1095817210523549796>";
+                        break;
+                    case "3":
+                        values[i] = "<:a:1095814417997889607>";
+                        break;
+                    case "4":
+                        values[i] = "<:a:1095815258448339086>";
+                        break;
+                    case "5":
+                        values[i] = "<:a:1095814692594794506>";
+                        break;
+                    case "6":
+                        values[i] = "<:a:1095814987877978275>";
+                        break;
+                    case "7":
+                        values[i] = "<:a:1095809091487682610>";
+                        break;
+                }
+            }
+        }
+        values[Math.ceil(Math.random() * 64)] = "<:fsh:1095817170333736990>"
+        const game = `||${values[0]}||||${values[1]}||||${values[2]}||||${values[3]}||||${values[4]}||||${values[5]}||||${values[6]}||||${values[7]}||
+||${values[8]}||||${values[9]}||||${values[10]}||||${values[11]}||||${values[12]}||||${values[13]}||||${values[14]}||||${values[15]}||
+||${values[16]}||||${values[17]}||||${values[18]}||||${values[19]}||||${values[20]}||||${values[21]}||||${values[22]}||||${values[23]}||
+||${values[24]}||||${values[25]}||||${values[26]}||||${values[27]}||||${values[28]}||||${values[29]}||||${values[30]}||||${values[31]}||
+||${values[32]}||||${values[33]}||||${values[34]}||||${values[35]}||||${values[36]}||||${values[37]}||||${values[38]}||||${values[39]}||
+||${values[40]}||||${values[41]}||||${values[42]}||||${values[43]}||||${values[44]}||||${values[45]}||||${values[46]}||||${values[47]}||
+||${values[48]}||||${values[49]}||||${values[50]}||||${values[51]}||||${values[52]}||||${values[53]}||||${values[54]}||||${values[55]}||
+||${values[56]}||||${values[57]}||||${values[58]}||||${values[59]}||||${values[60]}||||${values[61]}||||${values[62]}||||${values[63]}||`
+
+        if (privateOpt == true) {
+            await interaction.reply({ content: game, fetchReply: true, ephemeral: true })
+        } else {
+            await interaction.reply({ content: game, fetchReply: true, ephemeral: false })
+        }
+        log("Sent find-the-octopus game.")
     }
 });
 
