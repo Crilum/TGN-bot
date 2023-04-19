@@ -1,73 +1,12 @@
 const { REST, Routes, ActionRowBuilder, Base, ButtonBuilder, ButtonStyle, Events, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, Client, GatewayIntentBits, Message, GuildMemberManager, BaseChannel, SelectMenuBuilder, User } = require('discord.js');
 const { token, clientId, mongoURI } = require("./config.json");
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-
-const commands = [
-    {
-        name: 'game-poll',
-        description: 'Create a poll for game preferences',
-    },
-    {
-        name: 'add-poll-item',
-        description: 'Add a game to the game poll list',
-        options: [{
-            "name": "game-title",
-            "description": "The title of the game you're adding",
-            "type": 3,
-            "required": "true",
-        },
-        {
-            "name": "game-description",
-            "description": "A description of the game you're adding",
-            "type": 3,
-            "required": "true",
-        }]
-    },
-    {
-        name: 'remove-poll-item',
-        description: 'Remove a game from the game poll list',
-        options: [{
-            "name": "game-title",
-            "description": "The title of the game you're removing",
-            "type": 3,
-            "required": "false",
-        },
-        {
-            "name": "document-id",
-            "description": "The database document ID of the game you're removing",
-            "type": 3,
-            "required": "false",
-        }]
-    },
-    {
-        name: "bubble-wrap",
-        description: "Because why not"
-    },
-    {
-        name: "find-the-octopus",
-        description: "Find the octopus in a sea of fish!",
-        options: [{
-            "name": "private",
-            "description": "Should this puzzle be sent to the whole server (false), or just you (true)?",
-            "type": 5,
-            "required": "false",
-        }],
-    }
-];
-
-const rest = new REST({ version: '10' }).setToken(token);
-
-(async () => {
-    try {
-        console.log('Started refreshing application (/) commands.');
-
-        await rest.put(Routes.applicationCommands(clientId), { body: commands });
-
-        console.log('Successfully reloaded application (/) commands.');
-    } catch (error) {
-        console.error(error);
-    }
-})();
+let https, doc_to_edit, old_name, old_desc, old_link;
+try {
+    https = require('node:https');
+} catch (err) {
+    console.error('https support is disabled!');
+}
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.on('ready', () => {
@@ -166,9 +105,13 @@ client.on('interactionCreate', async interaction => {
 
 `
         for (let i = 0; i < items.length; i++) {
-            gameList = gameList + `${letterEmojis[i]} **${items[i].title}** (${items[i].desc})
+            if (items[i].url != null) {
+                gameList = gameList + `${letterEmojis[i]} **[${items[i].title}](${items[i].url})** (${items[i].desc})
 `
-
+            } else {
+                gameList = gameList + `${letterEmojis[i]} **${items[i].title}** (${items[i].desc})
+`
+            }
         }
         mClient.close()
         const embed = new EmbedBuilder()
@@ -202,9 +145,17 @@ We can't wait to see what games you find!!`)
         };
         let new_title = interaction.options.getString('game-title');
         let new_desc = interaction.options.getString('game-description');
+        let new_url = interaction.options.getString("game-url")
+
         await mClient.connect()
         const collection = mClient.db("TGN").collection("game-list-items");
-        let doc = { title: new_title, desc: new_desc }
+        let doc;
+        if (new_url != null) {
+            doc = { title: new_title, desc: new_desc, url: new_url }
+        } else {
+            doc = { title: new_title, desc: new_desc }
+        }
+        log(doc)
         try {
             const result = await collection.insertOne(doc);
             log(`Sucessfully added game "${new_title}"!`)
@@ -342,14 +293,62 @@ We can't wait to see what games you find!!`)
         mClient.close();
     }
 
+    if (interaction.commandName == "edit-poll-item") {
+        mClient.connect(async err => {
+            if (err) {
+                log("Error connecting to MongoDB.")
+                const embed = new EmbedBuilder()
+                    .setColor(13801196)
+                    .setTitle('Hold up...')
+                    .setDescription(`There was an error connecting to the database!!`)
+                    .setTimestamp()
+                    .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+                interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
+                return
+            }
+            log("Connected to MongoDB.")
+        });
+        const modal = new ModalBuilder()
+            .setCustomId('old_item_picker')
+            .setTitle('Pick a game to edit:')
+        const old_gameTitle = new TextInputBuilder()
+            .setCustomId('old_gameTitle')
+            .setLabel("The title of the game you want to edit:")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
+        const old_docID = new TextInputBuilder()
+            .setCustomId('old_docID')
+            .setLabel("OR, you can use the Document ID:")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
+        const firstActionRow = new ActionRowBuilder().addComponents(old_gameTitle);
+        const secondActionRow = new ActionRowBuilder().addComponents(old_docID);
+
+        // Add inputs to the modal
+        modal.addComponents(firstActionRow, secondActionRow);
+        await interaction.showModal(modal)
+
+    }
+
     if (interaction.commandName == "bubble-wrap") {
-        interaction.reply(`||pop||||pop||||pop||||pop||||pop||
+        const private = interaction.options.getBoolean('private');
+
+        const wrap = `||pop||||pop||||pop||||pop||||pop||
 ||pop||||pop||||pop||||pop||||pop||
 ||pop||||pop||||pop||||pop||||pop||
 ||pop||||pop||||pop||||pop||||pop||
 ||pop||||pop||||pop||||pop||||pop||
-||pop||||pop||||pop||||pop||||pop||`)
-        log("Sent bubble-wrap.")
+||pop||||pop||||pop||||pop||||pop||`
+
+        if (private == true) {
+            await interaction.reply({ content: wrap, fetchReply: true, ephemeral: true })
+            log("Sent ephemeral bubble-wrap.")
+        } else {
+            await interaction.reply({ content: wrap, fetchReply: true, ephemeral: false })
+            log("Sent bubble-wrap.")
+        }
     }
 
     if (interaction.commandName == "find-the-octopus") {
@@ -371,7 +370,7 @@ We can't wait to see what games you find!!`)
         }
 
         for (let i = 8; i < 64; i++) {
-            values[i] = "<:wtr:1095807899479048336>"//<:water:1095804110151880745>"
+            values[i] = "<:wtr:1095807899479048336>"
         }
         for (let i = 8; i < 64; i++) {
             if (Math.ceil(Math.random() * 3) == 2) {
@@ -413,10 +412,309 @@ We can't wait to see what games you find!!`)
 
         if (privateOpt == true) {
             await interaction.reply({ content: game, fetchReply: true, ephemeral: true })
+            log("Sent find-the-octopus game ephemerally.")
+
         } else {
             await interaction.reply({ content: game, fetchReply: true, ephemeral: false })
+            log("Sent find-the-octopus game.")
         }
-        log("Sent find-the-octopus game.")
+    }
+
+    if (interaction.commandName == "react-to-message") {
+        const link = interaction.options.getString("message-link");
+        const emoji = interaction.options.getString("emoji");
+        const silent = interaction.options.getBoolean("silent");
+
+        const linkArray = link
+            .replace("https://discord.com/channels/", "")
+            .split("/")
+        const guildID = linkArray[0]
+        const channelID = linkArray[1]
+        const messageID = linkArray[2]
+        log(`${channelID}, ${messageID}`)
+        const guild = await client.guilds.fetch(guildID);
+        const channel = guild.channels.cache.get(channelID);
+        try {
+            const message = await channel.messages.fetch(messageID)
+                .then(function (message) { message.react(emoji) });
+            if (silent == true) {
+                log("Reacted silently.")
+                interaction.deferReply();
+                interaction.deleteReply();
+                return
+            } else {
+                const embed = new EmbedBuilder()
+                    .setColor(13801196)
+                    .setTitle('Success!')
+                    .setDescription(`Successfully reacted "${emoji}" to message \`${link}\`!!`)
+                    .setTimestamp()
+                    .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+                await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: false })
+                log(`Successfully reacted "${emoji}" to message "${link}"!!`)
+            }
+        } catch (e) {
+            const embed = new EmbedBuilder()
+                .setColor(13801196)
+                .setTitle('Uh oh...')
+                .setDescription(`Something weird happened! Here's the error:
+\`\`\`
+${e}
+\`\`\``)
+                .setTimestamp()
+                .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+            await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: false })
+            log("Failed to react to message. Here's the error: " + e)
+        }
+
+    }
+
+    if (interaction.commandName == "joke") {
+        const privateOpt = interaction.options.getBoolean("private");
+        const jokeID = interaction.options.getInteger("id");
+        let category = interaction.options.getString("category");
+        let joke, logMessage, embed;
+        const categories = ["Any", "Misc", "Programming", "Pun", "Spooky", "Christmas"]
+
+        if (jokeID == null && category == null) {
+            let again = true;
+            while (again == true) {
+                joke = await fetch("https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious,political,racist,sexist,explicit")
+                    .then(interaction => interaction.json())
+                if (joke.safe == true) {
+                    again = false
+                } else {
+                    again = true
+                }
+            }
+        } else if (jokeID != null) {
+            if (jokeID > 319 || jokeID < 0) {
+                const embed = new EmbedBuilder()
+                    .setColor(13801196)
+                    .setTitle('Hmm.. Different ID, please?')
+                    .setDescription(`The range of english joke IDs is 0-319. Try another one.`)
+                    .setTimestamp()
+                    .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+                await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true })
+                return
+            }
+            joke = await fetch("https://v2.jokeapi.dev/joke/Any?idRange=" + jokeID)
+                .then(interaction => interaction.json())
+            if (joke.safe == false) {
+                const embed = new EmbedBuilder()
+                    .setColor(13801196)
+                    .setTitle('Maybe not that one...')
+                    .setDescription(`That joke is not.. Uhmm.. *Allowed* in this server! Try another one.`)
+                    .setTimestamp()
+                    .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+                await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true })
+                return
+            }
+        } else if (category != null) {
+            for (let i = 0; i < categories.length; i++) {
+                if (category.toLowerCase() == categories[i].toLowerCase()) {
+                    category = categories[i]
+                    break
+                } else if (i == categories.length - 1) {
+                    const embed = new EmbedBuilder()
+                        .setColor(13801196)
+                        .setTitle('Uh oh...')
+                        .setDescription(`That's not a valid category! Here's a list of valid categories: \`any, misc, programming, pun, spooky, christmas\``)
+                        .setTimestamp()
+                        .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+                    await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true })
+                    return
+                }
+            }
+
+            let again = true;
+            while (again == true) {
+                joke = await fetch("https://v2.jokeapi.dev/joke/" + category)
+                    .then(interaction => interaction.json())
+                if (joke.safe == true) {
+                    again = false
+                } else {
+                    again = true
+                }
+            }
+        }
+        if (joke.type == "twopart") {
+            embed = new EmbedBuilder()
+                .setColor(13801196)
+                .setTitle('Joke')
+                .setDescription(`${joke.setup}
+...
+||${joke.delivery}||
+
+Category: \`${joke.category}\`, ID: \`${joke.id}\``)
+                .setTimestamp()
+                .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+            logMessage = `${joke.setup}\n...\n${joke.delivery}\n\nCategory: ${joke.category}\nID: ${joke.id}`;
+        } else {
+            embed = new EmbedBuilder()
+                .setColor(13801196)
+                .setTitle('Joke')
+                .setDescription(`${joke.joke}\n\nCategory: \`${joke.category}\`, ID: \`${joke.id}\``)
+                .setTimestamp()
+                .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+            logMessage = `${joke.joke}\n\nCategory: ${joke.category}\nID: ${joke.id}`;
+        }
+        if (privateOpt == true) {
+            await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true })
+            log("Sent joke ephemerally:\n" + logMessage + "\n\nSafe? " + joke.safe)
+        } else {
+            await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: false })
+            log("Sent joke:\n" + logMessage + "\n\nSafe? " + joke.safe)
+        }
+    }
+
+});
+
+// modals
+
+client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isModalSubmit()) return;
+
+    if (interaction.customId == 'old_item_picker') {
+        console.log(interaction.fields.getTextInputValue("old_gameTitle"))
+        const collection = mClient.db("TGN").collection("game-list-items");
+        const old_game_title = interaction.fields.getTextInputValue("old_gameTitle");
+        const old_doc_id = interaction.fields.getTextInputValue("old_docID");
+        if (old_game_title != null) {
+            log(`Using game title...`)
+            let findResult;
+            try {
+            findResult = await collection.findOne({ "title": old_game_title })
+            log("Found result: " + findResult.title)
+            } catch (err) {
+                const embed = new EmbedBuilder()
+                    .setColor(13801196)
+                    .setTitle('Hold up...')
+                    .setDescription(`There's no game with that title!!`)
+                    .setTimestamp()
+                    .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+                interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
+                log("Error: No game with that title.")
+                return
+            }
+            doc_to_edit = findResult._id
+            old_name = findResult.title
+            old_desc = findResult.desc
+            old_link = findResult.url
+        } else if (old_doc_id != null) {
+            log(`Using document ID...`)
+            let findResult;
+            try {
+                findResult = await collection.findOne({ "_id": old_doc_id })
+                log("Found result: " + findResult.title)
+                } catch (err) {
+                    const embed = new EmbedBuilder()
+                        .setColor(13801196)
+                        .setTitle('Hold up...')
+                        .setDescription(`There's no game with that Document ID!!`)
+                        .setTimestamp()
+                        .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+                    interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
+                    log("Error: No game with that Document ID.")
+                    return
+                }
+            doc_to_edit = findResult._id
+            old_name = findResult.title
+            old_desc = findResult.desc
+            old_link = findResult.url
+        } else {
+            const embed = new EmbedBuilder()
+                .setColor(13801196)
+                .setTitle('Hold up...')
+                .setDescription(`You didn't enter anything!!`)
+                .setTimestamp()
+                .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+            interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
+            log("Error: No valid game title or document ID entered.")
+            return
+        }
+
+        const confirm = new ButtonBuilder()
+            .setCustomId('confirmEdit')
+            .setLabel(`Yep! Edit ${old_name}!`)
+            .setStyle(ButtonStyle.Primary);
+
+        const cancel = new ButtonBuilder()
+            .setCustomId('cancelEdit')
+            .setLabel('Cancel')
+            .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder()
+            .addComponents(cancel, confirm);
+
+        await interaction.reply({ content: `Found game with title \`${old_name}\`.\nAre you sure you want to edit it?`, components: [row], fetchReply: true, ephemeral: true });
+
+    }
+
+    if (interaction.customId == 'item_editor') {
+        const collection = mClient.db("TGN").collection("game-list-items");
+        const new_name = interaction.fields.getTextInputValue("gameTitle");
+        const new_desc = interaction.fields.getTextInputValue("gameDesc");
+        const new_link = interaction.fields.getTextInputValue("gameLink");
+        const new_values = { $set: { title: new_name, desc: new_desc, url: new_link } };
+        const updateResult = await collection.updateOne({ "_id": doc_to_edit }, new_values);
+        if (updateResult.modifiedCount == 1) {
+            const embed = new EmbedBuilder()
+                .setColor(13801196)
+                .setTitle('Success!')
+                .setDescription(`Successfully updated the game!`)
+                .setTimestamp()
+                .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+            await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
+            log("Successfully updated game.")
+        } else {
+            const embed = new EmbedBuilder()
+                .setColor(13801196)
+                .setTitle('Hold up...')
+                .setDescription(`There was an error updating the game!!`)
+                .setTimestamp()
+                .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+            await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
+            log("Error: Failed to update game.")
+        }
+    }
+});
+
+client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isButton()) return;
+
+    if (interaction.customId == 'confirmEdit') {
+        const modal = new ModalBuilder()
+            .setCustomId('item_editor')
+            .setTitle('Edit to your hearts content:');
+        const gameTitle = new TextInputBuilder()
+            .setCustomId('gameTitle')
+            .setLabel("The title of the game:")
+            .setValue(`${old_name}`)
+            .setStyle(TextInputStyle.Short);
+        const gameDesc = new TextInputBuilder()
+            .setCustomId('gameDesc')
+            .setLabel("The description of the game:")
+            .setValue(`${old_desc}`)
+            .setStyle(TextInputStyle.Paragraph);
+        const gameLink = new TextInputBuilder()
+            .setCustomId('gameLink')
+            .setLabel("The link to the game:")
+            .setValue(`${old_link}`)
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false);
+
+        const firstActionRow = new ActionRowBuilder().addComponents(gameTitle);
+        const secondActionRow = new ActionRowBuilder().addComponents(gameDesc);
+        const thirdActionRow = new ActionRowBuilder().addComponents(gameLink);
+
+        modal.addComponents(firstActionRow, secondActionRow, thirdActionRow);
+        await interaction.showModal(modal);
+        await interaction.deleteReply();
+    }
+
+    if (interaction.customId == 'cancelEdit') {
+        await interaction.update({ content: `Cancelled edit.`, components: [], fetchReply: true, ephemeral: true });
+        await interaction.deleteReply()
     }
 });
 
