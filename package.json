@@ -2,6 +2,7 @@
     "dependencies": {
         "discord.js": "^14.7.1",
         "mongodb": "^5.1.0",
-        "puppeteer": "^19.11.1"
+        "puppeteer": "^19.11.1",
+        "complimenter": "github:Crilum/complimenter"
     }
 }

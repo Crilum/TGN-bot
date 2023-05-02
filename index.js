@@ -4,6 +4,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const puppet = require('puppeteer');
 const fs = require('fs');
 const https = require('https');
+const complimenter = require("complimenter");
 let doc_to_edit, old_name, old_desc, old_link, filename;
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -84,6 +85,37 @@ function downloadImage(url, filepath) {
             }
         });
     });
+}
+
+async function compliment_random(self) {
+    log("")
+    log("Generating random compliment...")
+    let userID = self.options.getString('person');
+    let compliment_message = userID + ", " + complimenter("random");
+    await self.reply(compliment_message);
+    log('Compliment sent: "' + compliment_message + '"')
+}
+
+async function compliment_nice(self) {
+    log("")
+    log("Generating random nice compliment...")
+    let userID = self.options.getString('person');
+
+    let compliment = complimenter("nice");
+    let compliment_message = userID + ", " + compliment;
+    await self.reply(compliment_message);
+    log('Compliment sent: "' + compliment_message + '"')
+}
+
+async function get_regretted(self) {
+    log("")
+    log("Generating random roast...")
+    let userID = self.options.getString('person');
+
+    let roast = complimenter("roast");
+    let compliment_message = userID + ", " + roast;
+    await self.reply(compliment_message);
+    log('Roast sent: "' + compliment_message + '"')
 }
 
 client.on('interactionCreate', async interaction => {
@@ -661,6 +693,18 @@ Category: \`${joke.category}\`, ID: \`${joke.id}\``)
 
 
         log("Done!")
+    }
+
+    if (interaction.commandName === 'compliment-random') {
+        await compliment_random(interaction);
+    }
+
+    if (interaction.commandName === 'compliment') {
+        await compliment_nice(interaction);
+    }
+
+    if (interaction.commandName === 'get-regretted') {
+        await get_regretted(interaction);
     }
 
 });

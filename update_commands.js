@@ -124,6 +124,36 @@ const commands = [
         }],
     },
     {
+        name: 'compliment-random',
+        description: 'Compliment someone.. Or end up roasting them..',
+        options: [{
+            "name": "person",
+            "description": "Compliment this person",
+            "type": 3,
+            "required": "true",
+        }],
+    },
+    {
+        name: 'compliment',
+        description: 'Compliment someone',
+        options: [{
+            "name": "person",
+            "description": "Compliment this person",
+            "type": 3,
+            "required": "true",
+        }],
+    },
+    {
+        name: 'get-regretted',
+        description: 'Absolutely roast someone 😈',
+        options: [{
+            "name": "person",
+            "description": "Roast this person",
+            "type": 3,
+            "required": "true",
+        }],
+    },
+    {
         name: "help",
         description: "See how many commands this bot is capable of! .. Oh yeah, and see what they do, too.",
     },
