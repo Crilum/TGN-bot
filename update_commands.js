@@ -113,6 +113,20 @@ const commands = [
             "required": "false",
         },]
     },
+    {
+        name: "inspirobot",
+        description: "AI generated inspirational quotes for all!",
+        options: [{
+            "name": "private",
+            "description": "Should this quote be sent to the whole server (false), or just you (true)?",
+            "type": 5,
+            "required": "false",
+        }],
+    },
+    {
+        name: "help",
+        description: "See how many commands this bot is capable of! .. Oh yeah, and see what they do, too.",
+    },
 ];
 
 const rest = new REST({ version: '10' }).setToken(token);

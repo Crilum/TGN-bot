@@ -1,12 +1,10 @@
 const { REST, Routes, ActionRowBuilder, Base, ButtonBuilder, ButtonStyle, Events, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, Client, GatewayIntentBits, Message, GuildMemberManager, BaseChannel, SelectMenuBuilder, User } = require('discord.js');
 const { token, clientId, mongoURI } = require("./config.json");
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-let https, doc_to_edit, old_name, old_desc, old_link;
-try {
-    https = require('node:https');
-} catch (err) {
-    console.error('https support is disabled!');
-}
+const puppet = require('puppeteer');
+const fs = require('fs');
+const https = require('https');
+let doc_to_edit, old_name, old_desc, old_link, filename;
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.on('ready', () => {
@@ -63,6 +61,29 @@ function checkAdmin(interaction) {
     } else {
         return 0
     }
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
+
+function downloadImage(url, filepath) {
+    return new Promise((resolve, reject) => {
+        https.get(url, (res) => {
+            if (res.statusCode === 200) {
+                res.pipe(fs.createWriteStream(filepath))
+                    .on('error', reject)
+                    .once('close', () => resolve(filepath));
+            } else {
+                // Consume response data to free up memory
+                res.resume();
+                reject(new Error(`Request Failed With a Status Code: ${res.statusCode}`));
+
+            }
+        });
+    });
 }
 
 client.on('interactionCreate', async interaction => {
@@ -294,6 +315,17 @@ We can't wait to see what games you find!!`)
     }
 
     if (interaction.commandName == "edit-poll-item") {
+        if (checkAdmin(interaction) == 0) {
+            const embed = new EmbedBuilder()
+                .setColor(13801196)
+                .setTitle('Whoa there..')
+                .setDescription(`If you'd like to have a game edited on the poll, please ask an Admin. <:drink_water:1065817315695919105>`)
+                .setTimestamp()
+                .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+            await interaction.reply({ embeds: [embed], fetchReply: true })
+            log("Somebody tried to remove a edit item without permissions.")
+            return
+        };
         mClient.connect(async err => {
             if (err) {
                 log("Error connecting to MongoDB.")
@@ -306,8 +338,8 @@ We can't wait to see what games you find!!`)
                 interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
                 return
             }
-            log("Connected to MongoDB.")
         });
+        log("Connected to MongoDB.")
         const modal = new ModalBuilder()
             .setCustomId('old_item_picker')
             .setTitle('Pick a game to edit:')
@@ -567,6 +599,70 @@ Category: \`${joke.category}\`, ID: \`${joke.id}\``)
         }
     }
 
+    if (interaction.commandName == "help") {
+        const embed = new EmbedBuilder()
+            .setColor(13801196)
+            .setTitle('Commands')
+            .setDescription(`\`**/game-poll**\` - *Sends a poll with all the games in the database.*
+\`**/add-poll-item**\` - *Adds a game to the poll.*
+\`**/remove-poll-item**\` - *Removes a game from the poll.*
+\`**/edit-poll-item**\` - *Edits a game on the poll.*
+\`**/bubble-wrap**\` - *Sends a bubble-wrap message.*
+\`**/find-the-octopus**\` - *Sends a find-the-octopus game.*
+\`**/react-to-message**\` - *Reacts to a message.*
+\`**/inspirobot**\` - *Sends an InspiroBot quote.*
+\`**/joke**\` - *Sends a joke.*
+\`**/help**\` - *Sends this message.*`)
+            .setTimestamp()
+            .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+        interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true })
+    }
+
+    if (interaction.commandName == "inspirobot") {
+        await interaction.deferReply({ ephemeral: true })
+        log("Launching Puppeteer...")
+        await puppet.launch({ headless: "new" }).then(async browser => {
+            //browser new page
+            const p = await browser.newPage();
+            //set viewpoint of browser page
+            await p.setViewport({ width: 1920, height: 1080 })
+            //launch URL
+            log("Opening URL...")
+            await p.goto('https://inspirobot.me/')
+            const f = await p.$(".btn-generate")
+            log("Generating quote...")
+            await f.click()
+            await sleep(2500)
+            const img = await p.$(".generated-image")
+            const src = await img.getProperty('src')
+            const formattedSrc = `${src}`.split(':')[1] + ':' + `${src}`.split(':')[2]
+            log("Downloading quote (URL: " + formattedSrc + ")...")
+            filename = "./quotes/SPOILER_" + formattedSrc.split('/')[formattedSrc.split('/').length - 1]
+            await downloadImage(formattedSrc, filename)
+            log("Closing browser...")
+            await browser.close()
+        })
+
+        const send = new ButtonBuilder()
+            .setCustomId('send')
+            .setLabel('Send it to the world! (Make it public)')
+            .setStyle(ButtonStyle.Success);
+
+        const sus = new ButtonBuilder()
+            .setCustomId('sus')
+            .setLabel('That be sus bro.. (Delete quote)')
+            .setStyle(ButtonStyle.Secondary);
+
+        const row = new ActionRowBuilder()
+            .addComponents(sus, send);
+
+        log("Sending quote...")
+        await interaction.editReply({ files: [filename], components: [row], ephemeral: true });
+
+
+        log("Done!")
+    }
+
 });
 
 // modals
@@ -575,7 +671,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isModalSubmit()) return;
 
     if (interaction.customId == 'old_item_picker') {
-        console.log(interaction.fields.getTextInputValue("old_gameTitle"))
         const collection = mClient.db("TGN").collection("game-list-items");
         const old_game_title = interaction.fields.getTextInputValue("old_gameTitle");
         const old_doc_id = interaction.fields.getTextInputValue("old_docID");
@@ -583,8 +678,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
             log(`Using game title...`)
             let findResult;
             try {
-            findResult = await collection.findOne({ "title": old_game_title })
-            log("Found result: " + findResult.title)
+                findResult = await collection.findOne({ "title": old_game_title })
+                log("Found result: " + findResult.title)
             } catch (err) {
                 const embed = new EmbedBuilder()
                     .setColor(13801196)
@@ -606,17 +701,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
             try {
                 findResult = await collection.findOne({ "_id": old_doc_id })
                 log("Found result: " + findResult.title)
-                } catch (err) {
-                    const embed = new EmbedBuilder()
-                        .setColor(13801196)
-                        .setTitle('Hold up...')
-                        .setDescription(`There's no game with that Document ID!!`)
-                        .setTimestamp()
-                        .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
-                    interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
-                    log("Error: No game with that Document ID.")
-                    return
-                }
+            } catch (err) {
+                const embed = new EmbedBuilder()
+                    .setColor(13801196)
+                    .setTitle('Hold up...')
+                    .setDescription(`There's no game with that Document ID!!`)
+                    .setTimestamp()
+                    .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+                interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
+                log("Error: No game with that Document ID.")
+                return
+            }
             doc_to_edit = findResult._id
             old_name = findResult.title
             old_desc = findResult.desc
@@ -665,7 +760,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 .setTimestamp()
                 .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
             await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
-            log("Successfully updated game.")
+            log(`Successfully updated game.\n\nTitle: ${new_name}\nDescription: ${new_desc}\nURL: ${new_link}}`)
         } else {
             const embed = new EmbedBuilder()
                 .setColor(13801196)
@@ -715,6 +810,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId == 'cancelEdit') {
         await interaction.update({ content: `Cancelled edit.`, components: [], fetchReply: true, ephemeral: true });
         await interaction.deleteReply()
+    }
+
+    if (interaction.customId == 'send') {
+        await interaction.reply({ files: [filename], components: [], fetchReply: true, ephemeral: false });
+    }
+
+    if (interaction.customId == 'sus') {
+        fs.unlink(filename, (err) => {
+            if (err) {
+                log("Error deleting file: " + err)
+            } else {
+                log("Deleted file.")
+            }
+        });
+        await interaction.update({ content: `Deleted quote.`, components: [], files: [], fetchReply: true, ephemeral: true });
     }
 });
 
