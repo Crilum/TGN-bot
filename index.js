@@ -4,6 +4,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const puppet = require('puppeteer');
 const fs = require('fs');
 const https = require('https');
+const path = require('path');
 const complimenter = require("complimenter");
 let doc_to_edit, old_name, old_desc, old_link, filename;
 
@@ -669,6 +670,15 @@ Category: \`${joke.category}\`, ID: \`${joke.id}\``)
             const src = await img.getProperty('src')
             const formattedSrc = `${src}`.split(':')[1] + ':' + `${src}`.split(':')[2]
             log("Downloading quote (URL: " + formattedSrc + ")...")
+            if (! fs.existsSync("./quotes")) {
+                log("Quotes directory does not exist, creating...")
+                fs.mkdir(path.join(__dirname, 'quotes'), (err) => {
+                    if (err) {
+                        return log(err);
+                    }
+                    log('Quotes directory created successfully!');
+                });
+            }
             filename = "./quotes/SPOILER_" + formattedSrc.split('/')[formattedSrc.split('/').length - 1]
             await downloadImage(formattedSrc, filename)
             log("Closing browser...")
