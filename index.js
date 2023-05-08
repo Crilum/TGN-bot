@@ -653,7 +653,7 @@ Category: \`${joke.category}\`, ID: \`${joke.id}\``)
     if (interaction.commandName == "inspirobot") {
         await interaction.deferReply({ ephemeral: true })
         log("Launching Puppeteer...")
-        await puppet.launch({ headless: "new" }).then(async browser => {
+        await puppet.launch({ headless: "new", args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--disable-setuid-sandbox" ] }).then(async browser => {
             //browser new page
             const p = await browser.newPage();
             //set viewpoint of browser page
@@ -718,7 +718,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const collection = mClient.db("TGN").collection("game-list-items");
         const old_game_title = interaction.fields.getTextInputValue("old_gameTitle");
         const old_doc_id = interaction.fields.getTextInputValue("old_docID");
-        if (old_game_title != null) {
+        log(`Got game title "${old_game_title}" and document ID "${old_doc_id}".`)
+        if (old_game_title != "") {
             log(`Using game title...`)
             let findResult;
             try {
@@ -739,11 +740,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
             old_name = findResult.title
             old_desc = findResult.desc
             old_link = findResult.url
-        } else if (old_doc_id != null) {
+        } else if (old_doc_id != "") {
             log(`Using document ID...`)
             let findResult;
             try {
-                findResult = await collection.findOne({ "_id": old_doc_id })
+                const test = /[a-z]/
+                const testResult = test.test(old_doc_id)
+                log(`Document ID contains letters? ${testResult}`)
+                if (testResult == false) {
+                    log("This should not happen")
+                    findResult = await collection.findOne({ "_id": Number(old_doc_id) })
+                } else {
+                    let doc = { _id: ObjectId(`${old_doc_id}`) }
+                    console.log(doc)
+                    findResult = await collection.findOne(doc)
+                }
                 log("Found result: " + findResult.title)
             } catch (err) {
                 const embed = new EmbedBuilder()
@@ -800,16 +811,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
             const embed = new EmbedBuilder()
                 .setColor(13801196)
                 .setTitle('Success!')
-                .setDescription(`Successfully updated the game!`)
+                .setDescription(`Successfully updated **${new_name}**!`)
                 .setTimestamp()
                 .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
             await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
-            log(`Successfully updated game.\n\nTitle: ${new_name}\nDescription: ${new_desc}\nURL: ${new_link}}`)
+            log(`Successfully updated game.\n\nTitle: ${new_name}\nDescription: ${new_desc}\nURL: ${new_link}`)
         } else {
             const embed = new EmbedBuilder()
                 .setColor(13801196)
                 .setTitle('Hold up...')
-                .setDescription(`There was an error updating the game!!`)
+                .setDescription(`There was an error updating **${new_name}**!!`)
                 .setTimestamp()
                 .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
             await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
