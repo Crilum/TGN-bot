@@ -1,14 +1,15 @@
-const { REST, Routes, ActionRowBuilder, Base, ButtonBuilder, ButtonStyle, Events, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, Client, GatewayIntentBits, Message, GuildMemberManager, BaseChannel, SelectMenuBuilder, User } = require('discord.js');
+const { REST, Routes, ActionRowBuilder, Base, ButtonBuilder, ButtonStyle, Events, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, Client, GatewayIntentBits, Message, GuildMemberManager, BaseChannel, SelectMenuBuilder, User, Intents } = require('discord.js');
 const { token, clientId, mongoURI } = require("./config.json");
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId, ProfilingLevel } = require('mongodb');
 const puppet = require('puppeteer');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
 const complimenter = require("complimenter");
-let doc_to_edit, old_name, old_desc, old_link, filename;
+let doc_to_edit, old_name, old_desc, old_link, filename, items, game_poll_message, reactionCount = {};
+const letterEmojis = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯", "🇰", "🇱", "🇲", "🇳", "🇴", "🇵", "🇶", "🇷", "🇸", "🇹", "🇺", "🇻", "🇼", "🇽", "🇾", "🇿"]
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions] });
 client.on('ready', () => {
     console.log(colorize("green", "Ready!"), colorize("yellow", `Logged in as ${client.user.tag}`));
 });
@@ -123,47 +124,20 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'game-poll') {
-        const letterEmojis = [
-            '🇦',
-            "🇧",
-            "🇨",
-            "🇩",
-            "🇪",
-            "🇫",
-            "🇬",
-            "🇭",
-            "🇮",
-            "🇯",
-            "🇰",
-            "🇱",
-            "🇲",
-            "🇳",
-            "🇴",
-            "🇵",
-            "🇶",
-            "🇷",
-            "🇸",
-            "🇹",
-            "🇺",
-            "🇻",
-            "🇼",
-            "🇽",
-            "🇾",
-            "🇿",
-        ]
-
         await mClient.connect();
         const collection = mClient.db("TGN").collection("game-list-items");
-        let items = await collection.find({}).toArray();
+        items = await collection.find({}).toArray();
         let gameList = `**Choose as many as you would like**:
 
 `
-        for (let i = 0; i < items.length; i++) {
-            if (items[i].url != null) {
-                gameList = gameList + `${letterEmojis[i]} **[${items[i].title}](${items[i].url})** (${items[i].desc})
+        const time = interaction.options.getInteger('time') * 1000;
+        log(`Poll time: ${time} milliseconds`)
+        for (let reaction_count = 0; reaction_count < items.length; reaction_count++) {
+            if (items[reaction_count].url != null) {
+                gameList = gameList + `${letterEmojis[reaction_count]} **[${items[reaction_count].title}](${items[reaction_count].url})** (${items[reaction_count].desc})
 `
             } else {
-                gameList = gameList + `${letterEmojis[i]} **${items[i].title}** (${items[i].desc})
+                gameList = gameList + `${letterEmojis[reaction_count]} **${items[reaction_count].title}** (${items[reaction_count].desc})
 `
             }
         }
@@ -175,8 +149,64 @@ client.on('interactionCreate', async interaction => {
             .setTimestamp()
             .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
 
-        const message = await interaction.reply({ embeds: [embed], fetchReply: true });
+
+        const getResults = new ButtonBuilder()
+            .setCustomId('getResults')
+            .setLabel('Show detailed results')
+            .setStyle(ButtonStyle.Primary);
+
+        const row = new ActionRowBuilder()
+            .addComponents(getResults);
+
+        const message = await interaction.reply({ embeds: [embed], fetchReply: true, components: [row] });
+        game_poll_message = interaction.fetchReply()
         log("Poll sent. Now adding reactions...")
+        const collectorFilter = (reaction, user) => {
+            return !user.bot;
+        };
+
+        const collector = message.createReactionCollector({ filter: collectorFilter, max: 150, time: time });
+        collector.on('collect', (reaction, user) => {
+            log(`Collected ${reaction.emoji.name} from ${user.tag}`);
+            if (reactionCount[reaction.emoji.name] == undefined) {
+                reactionCount[reaction.emoji.name] = { count: 0, voters: [] }
+            }
+            reactionCount[reaction.emoji.name].count += 1
+            reactionCount[reaction.emoji.name].voters.push(user.globalName)
+        });
+
+        collector.on('end', (collected) => {
+            log(`Collected ${collected.size} items.`);
+            console.log(reactionCount)
+            let updatedGameList = "";
+            for (let i = 0; i < items.length; i++) {
+                if (reactionCount[letterEmojis[i]] != undefined) {
+                    if (items[i].url != null) {
+                        updatedGameList = updatedGameList + `${letterEmojis[i]} **[${items[i].title}](${items[i].url})** (${items[i].desc}) ***${reactionCount[letterEmojis[i]].count} vote(s)***
+`
+                    } else {
+                        updatedGameList = updatedGameList + `${letterEmojis[i]} **${items[i].title}** (${items[i].desc}) ***${reactionCount[letterEmojis[i]].count} vote(s)***
+`
+                    }
+                } else {
+                    if (items[i].url != null) {
+                        updatedGameList = updatedGameList + `${letterEmojis[i]} **[${items[i].title}](${items[i].url})** (${items[i].desc})
+`
+                    } else {
+                        updatedGameList = updatedGameList + `${letterEmojis[i]} **${items[i].title}** (${items[i].desc})
+`
+                    }
+                }
+            }
+            const embed = new EmbedBuilder()
+                .setColor(13801196)
+                .setTitle('The results are in!')
+                .setDescription(updatedGameList)
+                .setTimestamp()
+                .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+            interaction.editReply({ embeds: [embed], fetchReply: true, components: [row] })
+        });
+
         for (let i = 0; i < (gameList.split(/\r\n|\r|\n/).length - 3); i++) {
             log("Reacted with: " + letterEmojis[i])
             await message.react(letterEmojis[i])
@@ -654,7 +684,7 @@ Category: \`${joke.category}\`, ID: \`${joke.id}\``)
     if (interaction.commandName == "inspirobot") {
         await interaction.deferReply({ ephemeral: true })
         log("Launching Puppeteer...")
-        await puppet.launch({ headless: "new", args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--disable-setuid-sandbox" ] }).then(async browser => {
+        await puppet.launch({ headless: "new", args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--disable-setuid-sandbox"] }).then(async browser => {
             //browser new page
             const p = await browser.newPage();
             //set viewpoint of browser page
@@ -670,7 +700,7 @@ Category: \`${joke.category}\`, ID: \`${joke.id}\``)
             const src = await img.getProperty('src')
             const formattedSrc = `${src}`.split(':')[1] + ':' + `${src}`.split(':')[2]
             log("Downloading quote (URL: " + formattedSrc + ")...")
-            if (! fs.existsSync("./quotes")) {
+            if (!fs.existsSync("./quotes")) {
                 log("Quotes directory does not exist, creating...")
                 fs.mkdir(path.join(__dirname, 'quotes'), (err) => {
                     if (err) {
@@ -839,6 +869,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 });
 
+// Buttons
+
 client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isButton()) return;
 
@@ -890,6 +922,49 @@ client.on(Events.InteractionCreate, async (interaction) => {
             }
         });
         await interaction.update({ content: `Deleted quote.`, components: [], files: [], fetchReply: true, ephemeral: true });
+    }
+
+    if (interaction.customId = 'getResults') {
+        let results = "";
+
+        function getReactionUsers(i) {
+            let users = "";
+            for (let j = 0; j < reactionCount[letterEmojis[i]].voters.length; j++) {
+
+                users += `${reactionCount[letterEmojis[i]].voters[j]}
+`
+            }
+            return users;
+        }
+
+        for (let i = 0; i < Object.keys(reactionCount).length; i++) {
+            if (reactionCount[letterEmojis[i]] != undefined) {
+                if (items[i].url != null) {
+                    results += `**${reactionCount[letterEmojis[i]].count} vote(s) for ${letterEmojis[i]} ([${items[i].title}](${items[i].url})):**
+\`\`\`
+${getReactionUsers(i)}
+\`\`\`
+`
+                } else {
+                    results += `**${reactionCount[letterEmojis[i]].count} vote(s) for ${letterEmojis[i]} (${items[i].title}):**
+\`\`\`
+${getReactionUsers(i)}
+\`\`\`
+`
+                }
+            }
+        }
+        const embed = new EmbedBuilder()
+            .setColor(13801196)
+            .setTitle('Detailed Poll Results:')
+            .setDescription(results)
+            .setTimestamp()
+            .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+        interaction.reply({ embeds: [embed] })
+        /*game_poll_message.then(message => {
+            console.log(message)
+            client.channels.cache.get(message["channelId"]).send({ embeds: [embed] })
+        })*/
     }
 });
 

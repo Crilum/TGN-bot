@@ -6,6 +6,12 @@ const commands = [
     {
         name: 'game-poll',
         description: 'Create a poll for game preferences',
+        options: [{
+            "name": "time",
+            "description": "How long (in seconds) to keep the poll open for",
+            "type": 4,
+            "required": "true",
+        }]
     },
     {
         name: 'add-poll-item',
