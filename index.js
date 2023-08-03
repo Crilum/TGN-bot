@@ -158,7 +158,7 @@ client.on('interactionCreate', async interaction => {
         const row = new ActionRowBuilder()
             .addComponents(getResults);
 
-        const message = await interaction.reply({ embeds: [embed], fetchReply: true, components: [row] });
+        const message = await interaction.reply({ embeds: [embed], fetchReply: true });
         game_poll_message = interaction.fetchReply()
         log("Poll sent. Now adding reactions...")
         const collectorFilter = (reaction, user) => {
@@ -198,6 +198,8 @@ client.on('interactionCreate', async interaction => {
                     }
                 }
             }
+            updatedGameList += `
+**Poll ended. Thanks for voting!!**`
             const embed = new EmbedBuilder()
                 .setColor(13801196)
                 .setTitle('The results are in!')
