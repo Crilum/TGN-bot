@@ -926,7 +926,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.update({ content: `Deleted quote.`, components: [], files: [], fetchReply: true, ephemeral: true });
     }
 
-    if (interaction.customId = 'getResults') {
+    if (interaction.customId == 'getResults') {
         let results = "";
 
         function getReactionUsers(i) {
@@ -962,7 +962,7 @@ ${getReactionUsers(i)}
             .setDescription(results)
             .setTimestamp()
             .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
-        interaction.reply({ embeds: [embed] })
+        await interaction.reply({ embeds: [embed] })
         /*game_poll_message.then(message => {
             console.log(message)
             client.channels.cache.get(message["channelId"]).send({ embeds: [embed] })
