@@ -6,8 +6,7 @@ const fs = require('fs');
 const https = require('https');
 const path = require('path');
 const complimenter = require("complimenter");
-let doc_to_edit, old_name, old_desc, old_link, filename, items, game_poll_message, reactionCount = {};
-const letterEmojis = ["🇦", "🇧", "🇨", "🇩", "🇪", "🇫", "🇬", "🇭", "🇮", "🇯", "🇰", "🇱", "🇲", "🇳", "🇴", "🇵", "🇶", "🇷", "🇸", "🇹", "🇺", "🇻", "🇼", "🇽", "🇾", "🇿"]
+let doc_to_edit, old_name, old_desc, old_link, filename, command_user, reaction_count, game_poll_message, reactionCount = {};
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions] });
 client.on('ready', () => {
@@ -124,15 +123,42 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'game-poll') {
+        const letterEmojis = [
+            '🇦',
+            "🇧",
+            "🇨",
+            "🇩",
+            "🇪",
+            "🇫",
+            "🇬",
+            "🇭",
+            "🇮",
+            "🇯",
+            "🇰",
+            "🇱",
+            "🇲",
+            "🇳",
+            "🇴",
+            "🇵",
+            "🇶",
+            "🇷",
+            "🇸",
+            "🇹",
+            "🇺",
+            "🇻",
+            "🇼",
+            "🇽",
+            "🇾",
+            "🇿",
+        ]
+
         await mClient.connect();
         const collection = mClient.db("TGN").collection("game-list-items");
-        items = await collection.find({}).toArray();
+        let items = await collection.find({}).toArray();
         let gameList = `**Choose as many as you would like**:
 
 `
-        const time = interaction.options.getInteger('time') * 1000;
-        log(`Poll time: ${time} milliseconds`)
-        for (let reaction_count = 0; reaction_count < items.length; reaction_count++) {
+        for (reaction_count = 0; reaction_count < items.length; reaction_count++) {
             if (items[reaction_count].url != null) {
                 gameList = gameList + `${letterEmojis[reaction_count]} **[${items[reaction_count].title}](${items[reaction_count].url})** (${items[reaction_count].desc})
 `
@@ -158,48 +184,42 @@ client.on('interactionCreate', async interaction => {
         const row = new ActionRowBuilder()
             .addComponents(getResults);
 
-        const message = await interaction.reply({ embeds: [embed], fetchReply: true });
+        const message = await interaction.reply({ embeds: [embed], fetchReply: true, components: [row] });
         game_poll_message = interaction.fetchReply()
+        log(game_poll_message)
+        command_user = interaction.user.username
         log("Poll sent. Now adding reactions...")
         const collectorFilter = (reaction, user) => {
             return !user.bot;
         };
 
-        const collector = message.createReactionCollector({ filter: collectorFilter, max: 150, time: time });
+        const collector = message.createReactionCollector({ filter: collectorFilter, max: 150, time: 30000 });
         collector.on('collect', (reaction, user) => {
             log(`Collected ${reaction.emoji.name} from ${user.tag}`);
             if (reactionCount[reaction.emoji.name] == undefined) {
                 reactionCount[reaction.emoji.name] = { count: 0, voters: [] }
             }
             reactionCount[reaction.emoji.name].count += 1
-            reactionCount[reaction.emoji.name].voters.push(user.globalName)
+            reactionCount[reaction.emoji.name].voters.push(user.tag)
         });
 
         collector.on('end', (collected) => {
             log(`Collected ${collected.size} items.`);
             console.log(reactionCount)
-            let updatedGameList = "";
-            for (let i = 0; i < items.length; i++) {
+            let updatedGameList;
+            for (let i = 0; i < collected.size; i++) {
                 if (reactionCount[letterEmojis[i]] != undefined) {
+                    log(reactionCount[letterEmojis[i]].count)
                     if (items[i].url != null) {
-                        updatedGameList = updatedGameList + `${letterEmojis[i]} **[${items[i].title}](${items[i].url})** (${items[i].desc}) ***${reactionCount[letterEmojis[i]].count} vote(s)***
+                        updatedGameList = updatedGameList + `${letterEmojis[i]} **[${items[i].title}](${items[i].url})** (${items[i].desc}) *${reactionCount[letterEmojis[i]].count} votes*
 `
                     } else {
-                        updatedGameList = updatedGameList + `${letterEmojis[i]} **${items[i].title}** (${items[i].desc}) ***${reactionCount[letterEmojis[i]].count} vote(s)***
-`
-                    }
-                } else {
-                    if (items[i].url != null) {
-                        updatedGameList = updatedGameList + `${letterEmojis[i]} **[${items[i].title}](${items[i].url})** (${items[i].desc})
-`
-                    } else {
-                        updatedGameList = updatedGameList + `${letterEmojis[i]} **${items[i].title}** (${items[i].desc})
+                        updatedGameList = updatedGameList + `${letterEmojis[i]} **${items[i].title}** (${items[i].desc}) *${reactionCount[letterEmojis[i]].count} votes*
 `
                     }
                 }
+
             }
-            updatedGameList += `
-**Poll ended. Thanks for voting!!**`
             const embed = new EmbedBuilder()
                 .setColor(13801196)
                 .setTitle('The results are in!')
@@ -927,46 +947,34 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.customId == 'getResults') {
-        let results = "";
-
-        function getReactionUsers(i) {
-            let users = "";
-            for (let j = 0; j < reactionCount[letterEmojis[i]].voters.length; j++) {
-
-                users += `${reactionCount[letterEmojis[i]].voters[j]}
-`
-            }
-            return users;
+        const buttonClicker = interaction.user.username
+        if (buttonClicker != command_user) {
+            const embed = new EmbedBuilder()
+                .setColor(13801196)
+                .setTitle('Hold up...')
+                .setDescription(`Only the person who started the poll can get the results. Please ask **${command_user}** to click the button.`)
+                .setTimestamp()
+                .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
+            await interaction.reply({ embeds: [embed], fetchReply: true, ephemeral: true });
+            log("Error: The person who clicked the Get Poll Results button is not authorized.")
+            return
         }
-
-        for (let i = 0; i < Object.keys(reactionCount).length; i++) {
-            if (reactionCount[letterEmojis[i]] != undefined) {
-                if (items[i].url != null) {
-                    results += `**${reactionCount[letterEmojis[i]].count} vote(s) for ${letterEmojis[i]} ([${items[i].title}](${items[i].url})):**
-\`\`\`
-${getReactionUsers(i)}
-\`\`\`
-`
-                } else {
-                    results += `**${reactionCount[letterEmojis[i]].count} vote(s) for ${letterEmojis[i]} (${items[i].title}):**
-\`\`\`
-${getReactionUsers(i)}
-\`\`\`
-`
-                }
+        let reactions = []
+        function log_the_value(the_value) {
+            console.log(the_value.reactions);
+        }
+        game_poll_message.then(log_the_value)
+        cache = game_poll_message.reactions.cache
+        for (let i = 0; i < cache.length; i++) {
+            const reaction = cache[i]
+            log(reaction)
+            reactions[i] = {
+                "reactionName": reaction._emoji.name,
+                "reactionCount": reaction.count,
+                "reactionUsers": `${await reaction.users.fetch()}`
             }
         }
-        const embed = new EmbedBuilder()
-            .setColor(13801196)
-            .setTitle('Detailed Poll Results:')
-            .setDescription(results)
-            .setTimestamp()
-            .setFooter({ text: 'Sent by TGN', iconURL: 'https://github.com/Crilum/stuff/blob/main/tgn.jpg?raw=true' });
-        await interaction.reply({ embeds: [embed] })
-        /*game_poll_message.then(message => {
-            console.log(message)
-            client.channels.cache.get(message["channelId"]).send({ embeds: [embed] })
-        })*/
+        console.log(reactions)
     }
 });
 
